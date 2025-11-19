@@ -28,10 +28,17 @@
                             </svg>
                             <p>クリックまたはドラッグ&ドロップ</p>
                             <input type="file" id="fileInput" accept=".pptx,.ppt" multiple hidden>
+                            <input type="file" id="folderInput" webkitdirectory directory hidden>
                         </div>
                         <div id="filesList" class="files-list" style="display: none;">
                             <ul id="filesUl"></ul>
                             <button type="button" id="changeFilesBtn" class="btn-small">追加</button>
+                        </div>
+                        <div class="recursive-option">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="recursiveCheckbox">
+                                <span>フォルダ内を再帰的に処理</span>
+                            </label>
                         </div>
                     </section>
 

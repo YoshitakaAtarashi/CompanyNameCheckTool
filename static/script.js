@@ -2,10 +2,12 @@
 let selectedFiles = [];
 let currentAction = 'replace';
 let DEFAULT_KEYWORDS = [];
+let recursiveProcessing = false;
 
 // DOM要素
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
 const filesList = document.getElementById('filesList');
 const filesUl = document.getElementById('filesUl');
 const changeFilesBtn = document.getElementById('changeFilesBtn');
@@ -18,11 +20,18 @@ const previewBtn = document.getElementById('previewBtn');
 const executeBtn = document.getElementById('executeBtn');
 const resultsSection = document.getElementById('resultsSection');
 const resultContent = document.getElementById('resultContent');
+const recursiveCheckbox = document.getElementById('recursiveCheckbox');
 const loading = document.getElementById('loading');
 const errorAlert = document.getElementById('errorAlert');
 
 // イベントリスナー設定
-uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('click', () => {
+    if (recursiveProcessing) {
+        folderInput.click();
+    } else {
+        fileInput.click();
+    }
+});
 uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
     uploadArea.classList.add('dragover');
@@ -33,7 +42,12 @@ uploadArea.addEventListener('dragleave', () => {
 uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    handleFilesSelect(e.dataTransfer.files);
+    if (recursiveProcessing) {
+        // フォルダドロップの場合はファイルを直接処理
+        handleFolderSelect(e.dataTransfer.items);
+    } else {
+        handleFilesSelect(e.dataTransfer.files);
+    }
 });
 
 fileInput.addEventListener('change', (e) => {
@@ -42,8 +56,22 @@ fileInput.addEventListener('change', (e) => {
     e.target.value = '';
 });
 
+folderInput.addEventListener('change', (e) => {
+    handleFolderSelect(e.target.files);
+    // 次のフォルダ選択時に change イベントが発火するようにリセット
+    e.target.value = '';
+});
+
 changeFilesBtn.addEventListener('click', () => {
-    fileInput.click();
+    if (recursiveProcessing) {
+        folderInput.click();
+    } else {
+        fileInput.click();
+    }
+});
+
+recursiveCheckbox.addEventListener('change', (e) => {
+    recursiveProcessing = e.target.checked;
 });
 
 // 初期化：デフォルトキーワードから UI を生成
@@ -136,6 +164,33 @@ function handleFilesSelect(files) {
     }
 }
 
+// フォルダ選択処理
+function handleFolderSelect(files) {
+    if (!files || files.length === 0) return;
+
+    const validFiles = [];
+    for (let file of files) {
+        if (file.name.endsWith('.pptx') || file.name.endsWith('.ppt')) {
+            // 重複チェック
+            const isDuplicate = selectedFiles.some(f => f.name === file.name && f.size === file.size);
+            if (!isDuplicate) {
+                validFiles.push(file);
+            }
+        }
+    }
+
+    if (validFiles.length > 0) {
+        // 既存ファイルに追加
+        selectedFiles = selectedFiles.concat(validFiles);
+        console.log('Selected files from folder:', selectedFiles);
+        displayFilesList();
+        resultsSection.style.display = 'none';
+        clearError();
+    } else if (files.length > 0) {
+        showError('フォルダ内にPPTX/PPT形式のファイルが見つかりません');
+    }
+}
+
 // ファイルリストを表示
 function displayFilesList() {
     filesUl.innerHTML = '';
@@ -183,38 +238,30 @@ async function detectKeywords() {
         return;
     }
 
-    let allResults = [];
-    let totalKeywordCount = 0;
-
     try {
         showLoading(true);
 
+        // 全ファイルをまとめて送信
+        const formData = new FormData();
         for (let file of selectedFiles) {
-            const formData = new FormData();
             formData.append('file', file);
-            formData.append('keywords', JSON.stringify(selectedKeywords));
+        }
+        formData.append('keywords', JSON.stringify(selectedKeywords));
+        formData.append('recursive', recursiveProcessing);
 
-            const response = await fetch('/api/detect', {
-                method: 'POST',
-                body: formData
-            });
+        const response = await fetch('/api/detect', {
+            method: 'POST',
+            body: formData
+        });
 
-            const data = await response.json();
+        const data = await response.json();
 
-            if (!response.ok) {
-                showError(data.error || 'エラーが発生しました');
-                return;
-            }
-
-            allResults.push({
-                filename: file.name,
-                data: data
-            });
-
-            totalKeywordCount += data.total_count;
+        if (!response.ok) {
+            showError(data.error || 'エラーが発生しました');
+            return;
         }
 
-        displayDetectResults(allResults, totalKeywordCount);
+        displayDetectResults(data);
 
     } catch (error) {
         showError('通信エラー: ' + error.message);
@@ -241,46 +288,34 @@ async function previewChanges() {
         return;
     }
 
-    let totalBefore = 0;
-    let totalAfter = 0;
-    let totalModified = 0;
-
     try {
         showLoading(true);
 
+        // 全ファイルをまとめて送信
+        const formData = new FormData();
         for (let file of selectedFiles) {
-            const formData = new FormData();
             formData.append('file', file);
-            formData.append('keywords', JSON.stringify(selectedKeywords));
-            formData.append('action', currentAction);
-            if (currentAction === 'replace') {
-                formData.append('new_keyword', newKeywordInput.value);
-            }
-
-            const response = await fetch('/api/preview', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                showError(data.error || 'エラーが発生しました');
-                return;
-            }
-
-            totalBefore += data.before.count;
-            totalAfter += data.after.count;
-            totalModified += data.modified_shapes;
+        }
+        formData.append('keywords', JSON.stringify(selectedKeywords));
+        formData.append('action', currentAction);
+        formData.append('recursive', recursiveProcessing);
+        if (currentAction === 'replace') {
+            formData.append('new_keyword', newKeywordInput.value);
         }
 
-        displayPreviewResults({
-            before: { count: totalBefore },
-            after: { count: totalAfter },
-            modified_shapes: totalModified,
-            action: currentAction,
-            file_count: selectedFiles.length
+        const response = await fetch('/api/preview', {
+            method: 'POST',
+            body: formData
         });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showError(data.error || 'エラーが発生しました');
+            return;
+        }
+
+        displayPreviewResults(data);
 
     } catch (error) {
         showError('通信エラー: ' + error.message);
@@ -310,40 +345,48 @@ async function executeChanges() {
     try {
         showLoading(true);
 
+        // 全ファイルをまとめて送信
+        const formData = new FormData();
         for (let file of selectedFiles) {
-            const formData = new FormData();
             formData.append('file', file);
-            formData.append('keywords', JSON.stringify(selectedKeywords));
-            formData.append('action', currentAction);
-            if (currentAction === 'replace') {
-                formData.append('new_keyword', newKeywordInput.value);
-            }
-
-            const response = await fetch('/api/replace', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                showError(data.error || 'エラーが発生しました');
-                return;
-            }
-
-            // ファイルをダウンロード
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `modified_${file.name}`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+        }
+        formData.append('keywords', JSON.stringify(selectedKeywords));
+        formData.append('action', currentAction);
+        formData.append('recursive', recursiveProcessing);
+        if (currentAction === 'replace') {
+            formData.append('new_keyword', newKeywordInput.value);
         }
 
-        displaySuccessMessage(selectedFiles.length);
+        const response = await fetch('/api/replace', {
+            method: 'POST',
+            body: formData
+        });
 
+        if (!response.ok) {
+            const data = await response.json();
+            showError(data.error || 'エラーが発生しました');
+            return;
+        }
+
+        // ファイルをダウンロード
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // 複数ファイルの場合はZIP、単一ファイルの場合はPPTX
+        if (selectedFiles.length > 1) {
+            a.download = 'modified_presentations.zip';
+        } else {
+            a.download = `modified_${selectedFiles[0].name}`;
+        }
+        
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        displaySuccessMessage(selectedFiles.length);
     } catch (error) {
         showError('通信エラー: ' + error.message);
     } finally {
@@ -352,41 +395,38 @@ async function executeChanges() {
 }
 
 // 検出結果を表示
-function displayDetectResults(allResults, totalCount) {
+function displayDetectResults(data) {
     resultContent.innerHTML = '';
 
     const statsHtml = `
         <div class="stats">
             <div class="stat-box">
-                <div class="stat-value">${totalCount}</div>
+                <div class="stat-value">${data.total_count}</div>
                 <div class="stat-label">検出されたキーワード数</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">${selectedFiles.length}</div>
+                <div class="stat-value">${data.files_processed}</div>
                 <div class="stat-label">処理したファイル数</div>
             </div>
         </div>
     `;
 
     let detailsHtml = '';
-    allResults.forEach(result => {
-        if (result.data.results.length > 0) {
-            detailsHtml += `<h3 style="margin-top: 20px;">${result.filename} の詳細</h3>`;
-            result.data.results.forEach(item => {
-                detailsHtml += `
-                    <div class="result-item">
-                        <div class="result-header">スライド ${item.slide}</div>
-                        <div class="result-details">
-                            <p><strong>検出数:</strong> ${item.count}</p>
-                            <p><strong>テキスト:</strong> ${escapeHtml(item.text)}</p>
-                        </div>
+    if (data.results && data.results.length > 0) {
+        data.results.forEach(item => {
+            detailsHtml += `
+                <div class="result-item">
+                    <div class="result-header">スライド ${item.slide} (${item.file})</div>
+                    <div class="result-details">
+                        <p><strong>検出数:</strong> ${item.count}</p>
+                        <p><strong>テキスト:</strong> ${escapeHtml(item.text)}</p>
                     </div>
-                `;
-            });
-        }
-    });
+                </div>
+            `;
+        });
+    }
 
-    resultContent.innerHTML = statsHtml + detailsHtml;
+    resultContent.innerHTML = statsHtml + (detailsHtml ? detailsHtml : '<p>キーワードが見つかりません</p>');
     resultsSection.style.display = 'block';
 }
 
