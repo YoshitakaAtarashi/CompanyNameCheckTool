@@ -31,6 +31,10 @@
                             <input type="file" id="folderInput" webkitdirectory directory hidden>
                         </div>
                         <div id="filesList" class="files-list" style="display: none;">
+                            <div class="files-header">
+                                <span id="fileCount" class="file-count">0件のファイル</span>
+                                <button type="button" id="clearAllBtn" class="btn-clear-all">全て消去</button>
+                            </div>
                             <ul id="filesUl"></ul>
                             <button type="button" id="changeFilesBtn" class="btn-small">追加</button>
                         </div>

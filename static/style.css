@@ -156,6 +156,41 @@ h3 {
     margin-top: 6px;
 }
 
+.files-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 0 2px;
+}
+
+.file-count {
+    font-size: 11px;
+    color: var(--text-dark);
+    font-weight: 600;
+}
+
+.btn-clear-all {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.btn-clear-all:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+}
+
+.btn-clear-all:active {
+    transform: translateY(0);
+}
+
 .files-list h3 {
     display: none;
 }

@@ -11,6 +11,8 @@ const folderInput = document.getElementById('folderInput');
 const filesList = document.getElementById('filesList');
 const filesUl = document.getElementById('filesUl');
 const changeFilesBtn = document.getElementById('changeFilesBtn');
+const clearAllBtn = document.getElementById('clearAllBtn');
+const fileCount = document.getElementById('fileCount');
 const presetButtons = document.getElementById('presetButtons');
 const selectedKeywordsList = document.getElementById('selectedKeywordsList');
 const newKeywordInput = document.getElementById('newKeyword');
@@ -39,12 +41,35 @@ uploadArea.addEventListener('dragover', (e) => {
 uploadArea.addEventListener('dragleave', () => {
     uploadArea.classList.remove('dragover');
 });
-uploadArea.addEventListener('drop', (e) => {
+uploadArea.addEventListener('drop', async (e) => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    if (recursiveProcessing) {
-        // フォルダドロップの場合はファイルを直接処理
-        handleFolderSelect(e.dataTransfer.items);
+    
+    // ドロップされたアイテムを処理
+    const items = e.dataTransfer.items;
+    if (items) {
+        // DataTransferItemListを使用してディレクトリを判定
+        const entries = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+                const entry = item.webkitGetAsEntry();
+                if (entry) {
+                    entries.push(entry);
+                }
+            }
+        }
+        
+        // ディレクトリが含まれているか確認
+        const hasDirectory = entries.some(entry => entry.isDirectory);
+        
+        if (hasDirectory) {
+            // ディレクトリがある場合は再帰的に処理
+            await handleDirectoryDrop(entries);
+        } else {
+            // ファイルのみの場合は通常処理
+            handleFilesSelect(e.dataTransfer.files);
+        }
     } else {
         handleFilesSelect(e.dataTransfer.files);
     }
@@ -68,6 +93,14 @@ changeFilesBtn.addEventListener('click', () => {
     } else {
         fileInput.click();
     }
+});
+
+clearAllBtn.addEventListener('click', () => {
+    selectedFiles = [];
+    filesList.style.display = 'none';
+    uploadArea.style.display = 'block';
+    resultsSection.style.display = 'none';
+    clearError();
 });
 
 recursiveCheckbox.addEventListener('change', (e) => {
@@ -222,9 +255,102 @@ function handleFolderSelect(files) {
     }
 }
 
+// ディレクトリドロップ処理（再帰的にPPTファイルを探す）
+async function handleDirectoryDrop(entries) {
+    showLoading(true);
+    
+    try {
+        const allFiles = [];
+        
+        for (const entry of entries) {
+            if (entry.isDirectory) {
+                // ディレクトリの場合は再帰的に探索
+                const files = await traverseDirectory(entry, recursiveProcessing);
+                allFiles.push(...files);
+            } else if (entry.isFile) {
+                // ファイルの場合は直接追加
+                const file = await getFileFromEntry(entry);
+                if (file) {
+                    allFiles.push(file);
+                }
+            }
+        }
+        
+        console.log(`ディレクトリから見つかったファイル数: ${allFiles.length}`);
+        
+        if (allFiles.length > 0) {
+            handleFilesSelect(allFiles);
+        } else {
+            showError('ディレクトリ内にPPTX/PPT形式のファイルが見つかりません');
+        }
+    } catch (error) {
+        console.error('ディレクトリ処理エラー:', error);
+        showError('ディレクトリの処理中にエラーが発生しました');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// FileSystemEntryからFileオブジェクトを取得
+function getFileFromEntry(entry) {
+    return new Promise((resolve, reject) => {
+        entry.file(resolve, reject);
+    });
+}
+
+// ディレクトリを再帰的に探索
+async function traverseDirectory(dirEntry, recursive = false) {
+    const files = [];
+    
+    return new Promise((resolve, reject) => {
+        const dirReader = dirEntry.createReader();
+        
+        const readEntries = () => {
+            dirReader.readEntries(async (entries) => {
+                if (entries.length === 0) {
+                    resolve(files);
+                    return;
+                }
+                
+                for (const entry of entries) {
+                    if (entry.isFile) {
+                        const fileName = entry.name.toLowerCase();
+                        // PPTファイルのみ取得
+                        if ((fileName.endsWith('.pptx') || fileName.endsWith('.ppt')) && !entry.name.startsWith('.')) {
+                            try {
+                                const file = await getFileFromEntry(entry);
+                                files.push(file);
+                                console.log(`発見: ${entry.fullPath}`);
+                            } catch (error) {
+                                console.error(`ファイル取得エラー: ${entry.fullPath}`, error);
+                            }
+                        }
+                    } else if (entry.isDirectory && recursive) {
+                        // 再帰処理が有効な場合のみサブディレクトリを探索
+                        try {
+                            const subFiles = await traverseDirectory(entry, recursive);
+                            files.push(...subFiles);
+                        } catch (error) {
+                            console.error(`ディレクトリ探索エラー: ${entry.fullPath}`, error);
+                        }
+                    }
+                }
+                
+                readEntries(); // 次のエントリを読み込む
+            }, reject);
+        };
+        
+        readEntries();
+    });
+}
+
 // ファイルリストを表示
 function displayFilesList() {
     filesUl.innerHTML = '';
+    
+    // ファイル数を更新
+    fileCount.textContent = `${selectedFiles.length}件のファイル`;
+    
     selectedFiles.forEach((file, index) => {
         const li = document.createElement('li');
         li.innerHTML = `
