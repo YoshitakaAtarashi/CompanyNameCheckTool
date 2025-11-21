@@ -124,7 +124,7 @@ if __name__ == '__main__':
     diagnose_pptx(test_file)
     
     # 置換テスト
-    test_replace_in_pptx(test_file, 'hitachi astemo', 'astemo', output_file)
+    test_replace_in_pptx(test_file, 'old keyword', 'new keyword', output_file)
     
     # 置換後のファイルを診断
     diagnose_pptx(output_file)

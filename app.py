@@ -14,8 +14,8 @@ def load_config():
     """設定ファイルを読み込む"""
     config_file = 'config.json'
     default_config = {
-        'default_keywords': ['Hitachi Astemo', '日立Astemo', '日立アステモ'],
-        'default_replacement': 'Astemo',
+        'default_keywords': ['OldCompany', '旧社名', 'Old Company Name'],
+        'default_replacement': 'NewCompany',
         'max_file_size_mb': 50,
         'allowed_extensions': ['pptx', 'ppt']
     }
