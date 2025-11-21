@@ -113,29 +113,30 @@ def find_keywords_in_presentation(prs, keywords):
                         'is_master': False
                     })
     
-    # マスタースライドを処理
+    # マスタースライドを処理（複数のマスターグループに対応）
     try:
-        for master_num, master in enumerate(prs.slide_master.slide_layouts):
-            for shape_num, shape in enumerate(master.shapes):
-                if hasattr(shape, "text") and shape.text.strip():
-                    found_keywords = []
-                    total_count = 0
-                    
-                    for keyword in keywords:
-                        if keyword.lower() in shape.text.lower():
-                            count = shape.text.lower().count(keyword.lower())
-                            found_keywords.append(keyword)
-                            total_count += count
-                    
-                    if found_keywords:
-                        results.append({
-                            'slide': f'Master {master_num + 1}',
-                            'shape': shape_num,
-                            'text': shape.text,
-                            'keywords': found_keywords,
-                            'count': total_count,
-                            'is_master': True
-                        })
+        for master_group_num, slide_master in enumerate(prs.slide_masters):
+            for layout_num, layout in enumerate(slide_master.slide_layouts):
+                for shape_num, shape in enumerate(layout.shapes):
+                    if hasattr(shape, "text") and shape.text.strip():
+                        found_keywords = []
+                        total_count = 0
+                        
+                        for keyword in keywords:
+                            if keyword.lower() in shape.text.lower():
+                                count = shape.text.lower().count(keyword.lower())
+                                found_keywords.append(keyword)
+                                total_count += count
+                        
+                        if found_keywords:
+                            results.append({
+                                'slide': f'Master Group {master_group_num + 1}, Layout {layout_num + 1}',
+                                'shape': shape_num,
+                                'text': shape.text,
+                                'keywords': found_keywords,
+                                'count': total_count,
+                                'is_master': True
+                            })
     except Exception as e:
         print(f"マスタースライド処理エラー: {str(e)}")
     
@@ -198,21 +199,22 @@ def process_presentation(prs, keywords, new_keyword=None, is_delete=False):
                     if shape.text != original_text:
                         modified_count += 1
     
-    # マスタースライドを処理
+    # マスタースライドを処理（複数のマスターグループに対応）
     try:
-        for master in prs.slide_master.slide_layouts:
-            for shape in master.shapes:
-                if hasattr(shape, "text_frame"):
-                    original_text = shape.text
-                    
-                    has_keyword = any(kw.lower() in original_text.lower() for kw in keywords)
-                    
-                    if has_keyword:
-                        replacement_text = '' if is_delete else (new_keyword or keywords[0])
-                        replace_text_in_shape(shape, keywords, replacement_text, is_delete=is_delete)
+        for slide_master in prs.slide_masters:
+            for layout in slide_master.slide_layouts:
+                for shape in layout.shapes:
+                    if hasattr(shape, "text_frame"):
+                        original_text = shape.text
                         
-                        if shape.text != original_text:
-                            modified_count += 1
+                        has_keyword = any(kw.lower() in original_text.lower() for kw in keywords)
+                        
+                        if has_keyword:
+                            replacement_text = '' if is_delete else (new_keyword or keywords[0])
+                            replace_text_in_shape(shape, keywords, replacement_text, is_delete=is_delete)
+                            
+                            if shape.text != original_text:
+                                modified_count += 1
     except Exception as e:
         print(f"マスタースライド処理エラー: {str(e)}")
     
